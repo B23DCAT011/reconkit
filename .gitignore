@@ -23,6 +23,7 @@ htmlcov/
 *.sqlite3
 scans/
 *.log
+scope*.txt
 
 # OS / editor
 .DS_Store
