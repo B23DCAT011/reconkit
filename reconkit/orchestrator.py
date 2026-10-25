@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from reconkit.cve import CveSource
 from reconkit.plugins.base import ScannerPlugin
 from reconkit.schema import Asset
 from reconkit.scope import Scope
@@ -31,9 +32,15 @@ class ScanRun:
 class Orchestrator:
     """Runs the recon pipeline for a single target."""
 
-    def __init__(self, plugins: list[ScannerPlugin], scope: Scope) -> None:
+    def __init__(
+        self,
+        plugins: list[ScannerPlugin],
+        scope: Scope,
+        cve_source: CveSource | None = None,
+    ) -> None:
         self.plugins = plugins
         self.scope = scope
+        self.cve_source = cve_source
 
     def run(self, target: str) -> ScanRun:
         # 1. Safety gate: refuse anything outside the authorised scope.
@@ -48,7 +55,10 @@ class Orchestrator:
                 continue
             asset.services.extend(plugin.scan(target))
 
-        # 3. (future) CVE / config stages append to asset.findings here.
+        # 3. CVE stage: match each service against known vulnerabilities.
+        if self.cve_source is not None:
+            for service in asset.services:
+                asset.findings.extend(self.cve_source.find(service, asset.host))
 
         finished = datetime.now(UTC).isoformat()
         return ScanRun(target=target, started_at=started, finished_at=finished, assets=[asset])

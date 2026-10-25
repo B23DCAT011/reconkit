@@ -26,6 +26,9 @@ reconkit = "reconkit.cli:main"
 where = ["."]
 include = ["reconkit*"]
 
+[tool.setuptools.package-data]
+reconkit = ["data/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

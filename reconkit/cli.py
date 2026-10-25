@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from reconkit.cve import LocalCveSource
 from reconkit.orchestrator import Orchestrator, ScanRun
 from reconkit.plugins.nmap import NmapPlugin
 from reconkit.scope import Scope, ScopeError
@@ -37,7 +38,13 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         print(f"error: scope file not found: {args.scope}", file=sys.stderr)
         return 2
 
-    orch = Orchestrator(plugins=[NmapPlugin()], scope=scope)
+    if args.no_cve:
+        cve_source = None
+    elif args.cve_db:
+        cve_source = LocalCveSource(args.cve_db)
+    else:
+        cve_source = LocalCveSource()  # bundled seed
+    orch = Orchestrator(plugins=[NmapPlugin()], scope=scope, cve_source=cve_source)
     try:
         run = orch.run(args.target)
     except ScopeError as exc:
@@ -66,6 +73,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--scope", required=True, help="path to the allowlist file (one entry per line)"
     )
     scan.add_argument("--db", default="reconkit.db", help="SQLite database path")
+    scan.add_argument("--no-cve", action="store_true", help="skip the CVE matching stage")
+    scan.add_argument("--cve-db", help="path to a CVE seed JSON (default: bundled seed)")
     scan.set_defaults(func=_cmd_scan)
     return parser
 
