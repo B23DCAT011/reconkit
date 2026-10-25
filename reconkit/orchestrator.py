@@ -1,0 +1,54 @@
+"""Orchestrator — drives a scan through the pipeline, tool-agnostic.
+
+It knows the *order of stages*, not the details of any tool:
+
+    scope gate  ->  run each available plugin  ->  collect services into an Asset
+
+Findings (CVE matches etc.) are produced by a later stage and are left empty here;
+the `Asset.findings` list is the extension point for that work (see TASKS.md).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+
+from reconkit.plugins.base import ScannerPlugin
+from reconkit.schema import Asset
+from reconkit.scope import Scope
+
+
+@dataclass
+class ScanRun:
+    """The result of one scan of one target."""
+
+    target: str
+    started_at: str
+    finished_at: str
+    assets: list[Asset] = field(default_factory=list)
+
+
+class Orchestrator:
+    """Runs the recon pipeline for a single target."""
+
+    def __init__(self, plugins: list[ScannerPlugin], scope: Scope) -> None:
+        self.plugins = plugins
+        self.scope = scope
+
+    def run(self, target: str) -> ScanRun:
+        # 1. Safety gate: refuse anything outside the authorised scope.
+        self.scope.ensure_allowed(target)
+
+        started = datetime.now(UTC).isoformat()
+
+        # 2. Run every available plugin and merge the services onto one asset.
+        asset = Asset(host=target)
+        for plugin in self.plugins:
+            if not plugin.is_available():
+                continue
+            asset.services.extend(plugin.scan(target))
+
+        # 3. (future) CVE / config stages append to asset.findings here.
+
+        finished = datetime.now(UTC).isoformat()
+        return ScanRun(target=target, started_at=started, finished_at=finished, assets=[asset])
