@@ -4,23 +4,26 @@ from pathlib import Path
 
 from reconkit.orchestrator import ScanRun
 from reconkit.schema import Asset, Finding, Service, Severity
+from reconkit.storage import Storage
 
 
 def _make_run() -> ScanRun:
     svc = Service(port=22, name="ssh", product="OpenSSH", version="7.4")
     finding = Finding(
-        asset="scanme.lab", title="OpenSSH 7.4", severity=Severity.MEDIUM,
-        service=svc, cve="CVE-2018-15473",
+        asset="scanme.lab",
+        title="OpenSSH 7.4",
+        severity=Severity.MEDIUM,
+        service=svc,
+        cve="CVE-2018-15473",
     )
     finding.compute_fingerprint()
     asset = Asset(host="scanme.lab", ip="10.0.0.5", services=[svc], findings=[finding])
-    return ScanRun("scanme.lab", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:05+00:00",
-                   assets=[asset])
+    return ScanRun(
+        "scanme.lab", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:05+00:00", assets=[asset]
+    )
 
 
-def _store(tmp_path: Path):
-    from reconkit.storage import Storage
-
+def _store(tmp_path: Path) -> Storage:
     return Storage(tmp_path / "test.db")
 
 

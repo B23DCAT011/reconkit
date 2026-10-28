@@ -86,7 +86,7 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
 
 ## Mức 3 — Hoàn thiện sản phẩm / portfolio
 
-- [ ] **G17. Chưa có CI.** Sửa: GitHub Actions chạy pytest + ruff + mypy cho mọi PR.
+- [x] **G17. Chưa có CI.** Sửa: GitHub Actions chạy pytest + ruff + mypy cho mọi PR. (F1, `chore/ci`)
 - [ ] **G18. Chỉ in ra màn hình.** Sửa: xuất báo cáo JSON / HTML / SARIF.
 - [ ] **G19. Dùng `print`, chưa có logging.** Sửa: module `logging`, cờ `--verbose`.
 - [ ] **G20. Chưa có Docker, README chưa có demo.** Sửa: Dockerfile, ảnh/GIF demo, mục

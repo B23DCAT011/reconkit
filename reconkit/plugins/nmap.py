@@ -69,9 +69,10 @@ class NmapPlugin:
                     version = svc_el.get("version")
                     cpe_el = svc_el.find("cpe")
                     cpe = cpe_el.text if cpe_el is not None else None
-                    banner = " ".join(
-                        p for p in (product, version, svc_el.get("extrainfo")) if p
-                    ) or None
+                    banner = (
+                        " ".join(p for p in (product, version, svc_el.get("extrainfo")) if p)
+                        or None
+                    )
                 services.append(
                     Service(
                         port=int(port.get("portid", "0")),

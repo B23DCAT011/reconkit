@@ -99,8 +99,17 @@ class Storage:
             "(asset_id, port, protocol, state, name, product, version, cpe, banner) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (asset_id, s.port, s.protocol, s.state, s.name, s.product, s.version,
-                 s.cpe, s.banner)
+                (
+                    asset_id,
+                    s.port,
+                    s.protocol,
+                    s.state,
+                    s.name,
+                    s.product,
+                    s.version,
+                    s.cpe,
+                    s.banner,
+                )
                 for s in services
             ],
         )
@@ -109,9 +118,7 @@ class Storage:
         rows = []
         for f in findings:
             fp = f.fingerprint or f.compute_fingerprint()
-            rows.append(
-                (asset_id, f.title, str(f.severity), f.cve, f.description, f.evidence, fp)
-            )
+            rows.append((asset_id, f.title, str(f.severity), f.cve, f.description, f.evidence, fp))
         self._conn.executemany(
             "INSERT INTO finding "
             "(asset_id, title, severity, cve, description, evidence, fingerprint) "
@@ -128,8 +135,14 @@ class Storage:
         ).fetchall()
         return [
             Service(
-                port=r["port"], protocol=r["protocol"], state=r["state"], name=r["name"],
-                product=r["product"], version=r["version"], cpe=r["cpe"], banner=r["banner"],
+                port=r["port"],
+                protocol=r["protocol"],
+                state=r["state"],
+                name=r["name"],
+                product=r["product"],
+                version=r["version"],
+                cpe=r["cpe"],
+                banner=r["banner"],
             )
             for r in rows
         ]
@@ -143,8 +156,12 @@ class Storage:
         ).fetchall()
         return [
             Finding(
-                asset=r["host"], title=r["title"], severity=Severity(r["severity"]),
-                cve=r["cve"], description=r["description"] or "", evidence=r["evidence"] or "",
+                asset=r["host"],
+                title=r["title"],
+                severity=Severity(r["severity"]),
+                cve=r["cve"],
+                description=r["description"] or "",
+                evidence=r["evidence"] or "",
                 fingerprint=r["fingerprint"],
             )
             for r in rows
