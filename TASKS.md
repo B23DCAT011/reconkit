@@ -28,7 +28,7 @@ format cũ), và lớp an toàn scope.
 | # | Nhánh | Sửa | Vì sao ở vị trí này |
 |---|---|---|---|
 | F1 ✅ | `chore/ci` | G17 — GitHub Actions chạy pytest + ruff + mypy | Có trước để mọi PR sửa lỗi sau đều được kiểm tự động |
-| F2 | `fix/scope-deny-overlap` | G4 (phần denylist bị vượt qua bằng dải IP) | Lỗi an toàn nghiêm trọng nhất, sửa nhỏ, độc lập |
+| F2 ✅ | `fix/scope-deny-overlap` | G4 (phần denylist: dải IP chồng lấn deny; chú thích cuối dòng; entry không hợp lệ → lỗi) | Lỗi an toàn nghiêm trọng nhất, sửa nhỏ, độc lập |
 | F3 | `fix/scan-errors` | G3 — bọc lỗi subprocess thành `ScanError`, CLI báo lỗi rõ | Độc lập; cần có trước F4 để plugin mới dùng luôn |
 | F4 | `fix/no-plugin-available` | G2 — không plugin nào chạy được → lỗi, không lưu run "sạch" | Nhỏ; sửa cả câu sai trong README |
 | F5 | `refactor/per-host-assets` | G1 + G16 — plugin trả kết quả theo từng host, điền `Asset.ip` | Đổi hợp đồng plugin: phải xong trước khi thêm subfinder/nuclei |

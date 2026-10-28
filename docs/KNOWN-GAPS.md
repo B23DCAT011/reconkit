@@ -40,7 +40,12 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
     `10.0.0.0/24` + `!10.0.0.1` → `is_allowed("10.0.0.1")` = False nhưng
     `is_allowed("10.0.0.0/24")` = True, nên nmap vẫn quét 10.0.0.1. Nguyên nhân: deny chỉ
     kiểm tra "target nằm *trong* deny" (`subnet_of`) thay vì "target *chồng lấn* deny"
-    (`overlaps`).
+    (`overlaps`). ✅ **Đã sửa (F2)**: dải chồng lấn deny bị từ chối cả dải (fail closed).
+  - **Lỗi đi kèm thứ hai (đã xác nhận): chú thích cuối dòng vô hiệu hóa dòng deny.**
+    `!10.0.0.1   # router` không parse được thành IP nên bị lưu thành *hostname* rác, IP
+    vẫn quét được. Gốc rễ: chuỗi nào không phải IP thì bị *đoán* là hostname. ✅ **Đã sửa
+    (F2)**: `#` là chú thích ở mọi vị trí; entry không hợp lệ → `ScopeError` kèm số dòng,
+    CLI exit 2.
   - Khác: nmap mặc định chỉ quét IP đầu tiên của hostname; DNS có thể đổi giữa lúc kiểm tra
     và lúc quét (TOCTOU); chưa hỗ trợ wildcard `*.example.com`.
   - Sửa: phân giải hostname **một lần**, **mọi IP** phải nằm trong scope, rồi đưa **IP**
