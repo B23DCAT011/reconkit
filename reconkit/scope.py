@@ -43,6 +43,13 @@ def _contained(inner: Network, outer: Network) -> bool:
     return inner.subnet_of(outer)  # type: ignore[arg-type]
 
 
+def _overlaps(a: Network, b: Network) -> bool:
+    """True if `a` and `b` share at least one address (same IP version only)."""
+    if a.version != b.version:
+        return False
+    return a.overlaps(b)
+
+
 @dataclass
 class Scope:
     """An allowlist (with optional denylist) of hostnames and IP/CIDR targets."""
@@ -83,11 +90,16 @@ class Scope:
         return scope
 
     def is_allowed(self, target: str) -> bool:
-        """True iff `target` is inside the allowlist and not in the denylist."""
+        """True iff `target` is inside the allowlist and touches nothing in the denylist.
+
+        A range target is refused if *any* of its addresses is denied (fail closed):
+        `10.0.0.0/24` with `!10.0.0.1` is refused as a whole. Excluding the denied
+        hosts and scanning the rest is a later, deliberate step (TASKS.md F6).
+        """
         target = target.strip().lower()
         net = _parse_net(target)
         if net is not None:
-            if any(_contained(net, d) for d in self.deny_nets):
+            if any(_overlaps(net, d) for d in self.deny_nets):
                 return False
             return any(_contained(net, a) for a in self.allow_nets)
         # Hostname target.
