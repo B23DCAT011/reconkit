@@ -3,6 +3,8 @@
 File này lưu những gì đã tìm hiểu được cho dự án. Cứ bổ sung dần khi học thêm.
 
 Tài liệu thiết kế đầy đủ: https://claude.ai/artifact/69X8tKYCnShu8rYwzaNiV8
+Lộ trình học (các bài đã học + tóm tắt): [`docs/LO-TRINH-HOC.md`](docs/LO-TRINH-HOC.md)
+Lộ trình làm dự án: [`TASKS.md`](TASKS.md) · Điểm yếu cần sửa: [`docs/KNOWN-GAPS.md`](docs/KNOWN-GAPS.md)
 Cập nhật lần cuối: 2026-09-16
 
 ---
