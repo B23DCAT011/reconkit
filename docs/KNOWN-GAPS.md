@@ -61,6 +61,13 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
   Sửa: cấu hình được tốc độ, timeout, rate limit (file config + cờ CLI).
 - [ ] **G8. CVE khớp đúng phiên bản, bỏ qua CPE.**
   Sửa: khớp theo CPE + **dải phiên bản** (`versionStartIncluding`, `versionEndExcluding`…).
+  - Thêm: nmap thật trả version kiểu `7.4p1 Debian 10+deb9u7`, không phải `7.4` → so khớp
+    chính xác với seed **trượt ngay cả ví dụ OpenSSH 7.4**. `tests/data/nmap_sample.xml` đang
+    dùng version "sạch" (`7.4`) nên test không bắt được. Cần chuẩn hóa version (tách upstream
+    `7.4p1` khỏi hậu tố distro) và so sánh theo số, không theo chuỗi (`7.10` > `7.9`).
+    Fixture test nên lấy từ output nmap thật.
+  - Tên sản phẩm của nmap ≠ tên trong CPE (`Apache httpd` ↔ `apache:http_server`) — thêm lý
+    do phải khớp theo CPE thay vì theo tên.
 - [ ] **G9. Dữ liệu CVE chỉ là seed 4 dòng.**
   Sửa: `NvdCveSource` đồng bộ NVD API 2.0 về cache local (có API key, tôn trọng rate limit);
   cân nhắc OSV, CISA KEV.
