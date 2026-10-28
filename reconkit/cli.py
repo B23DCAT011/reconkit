@@ -37,6 +37,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     except FileNotFoundError:
         print(f"error: scope file not found: {args.scope}", file=sys.stderr)
         return 2
+    except ScopeError as exc:
+        print(f"error: invalid scope file: {exc}", file=sys.stderr)
+        return 2
 
     if args.no_cve:
         cve_source = None

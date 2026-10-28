@@ -1,5 +1,7 @@
 """Tests for the scope guard (allowlist / denylist)."""
 
+from pathlib import Path
+
 import pytest
 
 from reconkit.scope import Scope, ScopeError
@@ -49,6 +51,36 @@ def test_deny_of_other_ip_version_does_not_interfere() -> None:
 def test_comments_and_blank_lines_ignored() -> None:
     scope = Scope.from_entries(["# a comment", "", "   ", "host.lab"])
     assert scope.allow_hosts == {"host.lab"}
+
+
+def test_inline_comment_does_not_disable_entry() -> None:
+    """Regression (G4): '!10.0.0.1  # router' used to become a bogus hostname."""
+    scope = Scope.from_entries(["10.0.0.0/24", "!10.0.0.1          # router", "host.lab # lab"])
+    assert not scope.is_allowed("10.0.0.1")
+    assert scope.is_allowed("host.lab")
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "has space.lab",  # whitespace inside an entry
+        "10.0.0.300",  # looks like an IP but is not one
+        "10.0.0.0/33",  # invalid prefix length
+        "bad!host.lab",  # illegal character
+        "*.example.com",  # wildcards are not supported (yet) — must not silently never match
+        "!",  # deny marker with nothing after it
+    ],
+)
+def test_invalid_entry_is_rejected(entry: str) -> None:
+    with pytest.raises(ScopeError):
+        Scope.from_entries([entry])
+
+
+def test_from_file_reports_line_number(tmp_path: Path) -> None:
+    p = tmp_path / "scope.txt"
+    p.write_text("scanme.lab\n# ok\n10.0.0.300\n", encoding="utf-8")
+    with pytest.raises(ScopeError, match=r"scope\.txt:3"):
+        Scope.from_file(p)
 
 
 def test_empty_scope_denies_everything() -> None:
