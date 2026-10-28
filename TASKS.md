@@ -17,7 +17,7 @@ Cập nhật lần cuối: 2026-10-28.
 - [x] `feat/plugin-nmap` — interface plugin + adapter nmap. (PR #4)
 - [x] `feat/integration` — SQLite + orchestrator + CLI end-to-end. (PR #5)
 - [x] `feat/cve` — bước CVE offline, nguồn CVE cắm được. (PR #6)
-- [ ] `docs/known-gaps` — rà soát điểm yếu + lộ trình này.
+- [x] `docs/known-gaps` — rà soát điểm yếu + lộ trình này. (PR #8)
 
 ## Giai đoạn 1.5 — Sửa nền móng (đang làm)
 
@@ -27,7 +27,7 @@ format cũ), và lớp an toàn scope.
 
 | # | Nhánh | Sửa | Vì sao ở vị trí này |
 |---|---|---|---|
-| F1 | `chore/ci` | G17 — GitHub Actions chạy pytest + ruff + mypy | Có trước để mọi PR sửa lỗi sau đều được kiểm tự động |
+| F1 ✅ | `chore/ci` | G17 — GitHub Actions chạy pytest + ruff + mypy | Có trước để mọi PR sửa lỗi sau đều được kiểm tự động |
 | F2 | `fix/scope-deny-overlap` | G4 (phần denylist bị vượt qua bằng dải IP) | Lỗi an toàn nghiêm trọng nhất, sửa nhỏ, độc lập |
 | F3 | `fix/scan-errors` | G3 — bọc lỗi subprocess thành `ScanError`, CLI báo lỗi rõ | Độc lập; cần có trước F4 để plugin mới dùng luôn |
 | F4 | `fix/no-plugin-available` | G2 — không plugin nào chạy được → lỗi, không lưu run "sạch" | Nhỏ; sửa cả câu sai trong README |
