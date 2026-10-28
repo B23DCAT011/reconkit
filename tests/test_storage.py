@@ -4,6 +4,7 @@ from pathlib import Path
 
 from reconkit.orchestrator import ScanRun
 from reconkit.schema import Asset, Finding, Service, Severity
+from reconkit.storage import Storage
 
 
 def _make_run() -> ScanRun:
@@ -22,9 +23,7 @@ def _make_run() -> ScanRun:
     )
 
 
-def _store(tmp_path: Path):
-    from reconkit.storage import Storage
-
+def _store(tmp_path: Path) -> Storage:
     return Storage(tmp_path / "test.db")
 
 
