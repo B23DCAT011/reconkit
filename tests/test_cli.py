@@ -37,3 +37,17 @@ def test_scan_refuses_out_of_scope(tmp_path: Path, monkeypatch, capsys) -> None:
     )
     assert code == 3  # refused
     assert "refused" in capsys.readouterr().err
+
+
+def test_scan_rejects_invalid_scope_file(tmp_path: Path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    scope_file = tmp_path / "scope.txt"
+    scope_file.write_text("scanme.lab\nnot a host\n", encoding="utf-8")
+
+    monkeypatch.setattr(cli, "NmapPlugin", lambda: FakePlugin([]))
+    code = cli.main(
+        ["scan", "scanme.lab", "--scope", str(scope_file), "--db", str(tmp_path / "x.db")]
+    )
+    assert code == 2  # bad input, same as a missing scope file
+    err = capsys.readouterr().err
+    assert "invalid scope file" in err
+    assert "scope.txt:2" in err
