@@ -25,6 +25,10 @@ scans/
 *.log
 scope*.txt
 
+# Office binaries — design docs live in docs/*.md; the Word version is kept outside git
+*.docx
+~$*
+
 # OS / editor
 .DS_Store
 Thumbs.db
