@@ -5,9 +5,10 @@ dùng lý do "chỉ là lab" để bỏ qua điểm yếu: chỗ nào đã nhìn
 giữ tạm phải ghi vào [`docs/KNOWN-GAPS.md`](docs/KNOWN-GAPS.md) (mã `G1`…`G20`).
 
 Quy trình: mỗi task = 1 nhánh = 1 PR, merge trên GitHub theo thứ tự dưới đây. Lộ trình học
-song song: [`docs/LO-TRINH-HOC.md`](docs/LO-TRINH-HOC.md).
+song song: [`docs/LO-TRINH-HOC.md`](docs/LO-TRINH-HOC.md). Tầm nhìn & các quyết định thiết kế
+đã chốt (D1–D8): [`docs/THIET-KE.md`](docs/THIET-KE.md).
 
-Cập nhật lần cuối: 2026-10-28.
+Cập nhật lần cuối: 2026-11-07.
 
 ## Giai đoạn 1 — Lát cắt dọc (CLI) ✅
 
@@ -37,20 +38,34 @@ format cũ), và lớp an toàn scope.
 | F8 | `fix/fingerprint-identity` | G12 — fingerprint theo asset + port + protocol + CVE/rule id | Phải ổn định trước `feat/diff` |
 | F9 | `feat/evidence` | G13 — lưu output gốc của tool, điền `evidence` | Cần F7 (schema) |
 
+## Cột mốc M1 — Báo cáo HTML có bản đồ (sau F9)
+
+Mục tiêu: **nhìn thấy** bề mặt tấn công sớm, trước khi xây web server. Chỉ làm được sau F5
+(dữ liệu theo từng host) và F7 (finding gắn với service).
+
+- [ ] `feat/nmap-traceroute` — plugin nmap thêm `--traceroute` (bật theo profile), lưu các
+      hop của từng host → vẽ đường đi máy quét → router → dải mạng.
+- [ ] `feat/report-html` — `reconkit report --run <id> --html <file>`: một file HTML duy nhất,
+      nhúng sẵn dữ liệu đồ thị (JSON) + Cytoscape.js, mở offline. Phần Python chỉ dùng thư
+      viện chuẩn. (G18)
+
 ## Giai đoạn 2 — Mở rộng theo chuẩn thực tế
 
 - [ ] CVE thật: khớp CPE + dải phiên bản, chuẩn hóa version (G8); `NvdCveSource` đồng bộ
       NVD API 2.0 về cache local (G9); `Finding.confidence` cho vấn đề backport (G10);
       CVSS score/vector, CWE, KEV, EPSS + xếp ưu tiên (G11).
 - [ ] Scan profile `quick` / `full`, cấu hình tốc độ / timeout (G6, G7).
-- [ ] `feat/diff` — so fingerprint giữa các lần quét: lỗi mới / đã hết / fix giả.
-- [ ] Báo cáo JSON / HTML / SARIF (G18); `logging` + `--verbose` (G19).
+- [ ] `feat/diff` — so fingerprint giữa các lần quét: lỗi mới / đã hết / fix giả. Kèm mô hình
+      dữ liệu lai: kho tài sản (`first_seen` / `last_seen`, trạng thái finding) + lịch sử
+      từng run (`observation`, `finding_event`) — xem D1.
+- [ ] Báo cáo JSON / SARIF (G18; HTML đã có từ M1); `logging` + `--verbose` (G19).
 - [ ] Plugin `subfinder` (subdomain, cần wildcard scope), `nuclei` (template checks).
 - [ ] (Nâng cao) Quét có đăng nhập — đối chiếu gói đã cài với Debian/Ubuntu security tracker.
 
 ## Giai đoạn 3 — Dịch vụ chạy nền
 
-- [ ] Scheduler + queue (Redis + RQ/Celery) + worker.
-- [ ] API + thông báo.
+- [ ] Scheduler + queue (Redis + RQ) + worker.
+- [ ] Web API (FastAPI) + Web UI dùng lại code vẽ bản đồ của M1 + thông báo. Thư viện web
+      đặt trong gói tuỳ chọn `reconkit[server]`, lõi vẫn không phụ thuộc.
 - [ ] Đóng gói Docker Compose + volume + backup DB; README có demo (G20).
 - [ ] Lab mục tiêu (Metasploitable / container có lỗ hổng) trong network nội bộ.
