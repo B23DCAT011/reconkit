@@ -57,7 +57,19 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
     `scan failed [nmap]: …`, trả exit code 4 và **không lưu run** vào DB. Output của nmap
     được đọc theo UTF-8 thay vì codepage của Windows.
 
-- [ ] **G4. Scope chỉ kiểm tra chuỗi nhập vào, không kiểm tra IP thật.**
+- [x] **G4. Scope chỉ kiểm tra chuỗi nhập vào, không kiểm tra IP thật.**
+  - ✅ **Đã sửa phần DNS (F6)**: `Scope.plan()` là cổng duy nhất trước khi quét. Tên miền
+    được phân giải **một lần** (IPv4), **mọi** IP phải nằm trong allowlist và không dính
+    deny, nếu không → `ScopeError` nêu rõ IP. Plugin nhận `ScanTarget` (danh sách IP đã
+    duyệt + danh sách loại trừ) nên nmap không bao giờ tự phân giải tên → hết TOCTOU, và
+    quét đủ mọi IP của tên. Dải chồng lấn deny được quét với `--exclude`; target bị deny
+    phủ kín (kể cả phủ từng mảnh) thì từ chối. Orchestrator kiểm lại từng host trong kết
+    quả: host ngoài scope bị loại, ghi vào `ScanRun.out_of_scope`, CLI cảnh báo. Tên không
+    phân giải được → `ResolutionError`, exit 4. Đã kiểm với nmap + DNS thật.
+  - Hệ quả cho người dùng: file scope chỉ có tên miền là **không đủ**, phải khai cả IP/dải.
+  - Còn lại: wildcard `*.example.com` (→ plugin subfinder); IPv6 (→ G22); quét bằng IP làm
+    mất tên miền ở tầng HTTP (virtual host / SNI) — phải truyền lại tên khi làm plugin kiểm
+    tra web (nuclei); `out_of_scope` chưa lưu vào DB (→ F7).
   - Dẫn chứng: `scope.py` so khớp hostname, không phân giải DNS.
   - Hậu quả: domain trong allowlist nhưng trỏ tới IP ngoài phạm vi vẫn bị quét — lỗ hổng ở
     chính lớp an toàn.
@@ -122,6 +134,13 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
     được; sửa file scope sau khi quét là mất dấu.
   - Sửa: lưu vào `scan_run` mã băm SHA-256 + đường dẫn của file scope, người chạy, và một
     trường tham chiếu giấy phép (`--engagement`); cân nhắc khung giờ trong file scope.
+- [ ] **G22. Chưa hỗ trợ IPv6.** (từ F6)
+  - Dẫn chứng: `resolve_ipv4()` chỉ hỏi bản ghi A; plugin nmap không truyền `-6` (nmap
+    không trộn được IPv4 và IPv6 trong một lần chạy).
+  - Hậu quả: tên miền có cả AAAA thì phần IPv6 không được kiểm tra scope lẫn quét — an toàn
+    (không đụng tới địa chỉ chưa duyệt) nhưng bỏ sót bề mặt tấn công. Target là địa chỉ
+    IPv6 qua được scope nhưng nmap báo lỗi (exit 4).
+  - Sửa: phân giải cả AAAA, kiểm scope như IPv4, chạy nmap riêng với `-6` cho nhóm IPv6.
 
 ## Mức 3 — Hoàn thiện sản phẩm / portfolio
 

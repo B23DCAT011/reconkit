@@ -33,7 +33,7 @@ format cũ), và lớp an toàn scope.
 | F3 ✅ | `fix/scan-errors` | G3 — bọc lỗi subprocess thành `ScanError`, CLI báo lỗi rõ | Độc lập; cần có trước F4 để plugin mới dùng luôn |
 | F4 ✅ | `fix/no-plugin-available` | G2 — không plugin nào chạy được → lỗi, không lưu run "sạch" | Nhỏ; sửa cả câu sai trong README |
 | F5 ✅ | `refactor/per-host-assets` | G1 + G16 — plugin trả kết quả theo từng host, điền `Asset.ip` | Đổi hợp đồng plugin: phải xong trước khi thêm subfinder/nuclei |
-| F6 | `fix/scope-resolve` | G4 (phần DNS) — phân giải 1 lần, kiểm mọi IP, quét bằng IP, `--exclude`, kiểm lại sau quét | Cần F2 + F5 (có danh sách host để kiểm lại) |
+| F6 ✅ | `fix/scope-resolve` | G4 (phần DNS) — phân giải 1 lần, kiểm mọi IP, quét bằng IP, `--exclude`, kiểm lại sau quét | Cần F2 + F5 (có danh sách host để kiểm lại) |
 | F7 | `refactor/storage-schema` | G5 + G14 + G15 — `finding.service_id`, `scan_run.status/error/tool_version`, index FK, cascade, `schema_version` | Đổi schema DB trước khi có dữ liệu thật tích lũy |
 | F8 | `fix/fingerprint-identity` | G12 — fingerprint theo asset + port + protocol + CVE/rule id | Phải ổn định trước `feat/diff` |
 | F9 | `feat/evidence` | G13 — lưu output gốc của tool, điền `evidence` | Cần F7 (schema) |
@@ -55,6 +55,7 @@ Mục tiêu: **nhìn thấy** bề mặt tấn công sớm, trước khi xây we
       NVD API 2.0 về cache local (G9); `Finding.confidence` cho vấn đề backport (G10);
       CVSS score/vector, CWE, KEV, EPSS + xếp ưu tiên (G11).
 - [ ] Scan profile `quick` / `full`, cấu hình tốc độ / timeout (G6, G7).
+- [ ] IPv6: phân giải AAAA, kiểm scope, chạy nmap `-6` riêng (G22).
 - [ ] Dấu vết kiểm toán: `scan_run` lưu mã băm file scope, người chạy, tham chiếu giấy phép
       (G21).
 - [ ] `feat/diff` — so fingerprint giữa các lần quét: lỗi mới / đã hết / fix giả. Kèm mô hình
