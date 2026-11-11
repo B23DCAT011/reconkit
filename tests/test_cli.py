@@ -2,11 +2,12 @@
 
 from pathlib import Path
 
-from conftest import FakePlugin
+from conftest import FakePlugin, lab_asset
 
 from reconkit import cli
 from reconkit.plugins.base import ScanError
 from reconkit.schema import Service
+from reconkit.storage import Storage
 
 
 def test_scan_end_to_end(tmp_path: Path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
@@ -15,7 +16,7 @@ def test_scan_end_to_end(tmp_path: Path, monkeypatch, capsys) -> None:  # type: 
     db = tmp_path / "out.db"
 
     # Replace the real nmap plugin with a deterministic fake.
-    fake = FakePlugin([Service(port=22, name="ssh", product="OpenSSH", version="7.4")])
+    fake = FakePlugin([lab_asset(Service(port=22, name="ssh", product="OpenSSH", version="7.4"))])
     monkeypatch.setattr(cli, "NmapPlugin", lambda: fake)
 
     code = cli.main(["scan", "scanme.lab", "--scope", str(scope_file), "--db", str(db)])
@@ -24,8 +25,42 @@ def test_scan_end_to_end(tmp_path: Path, monkeypatch, capsys) -> None:  # type: 
     assert code == 0
     assert db.exists()
     assert "Scan run #1" in out
+    assert "hosts: 1 " in out
+    assert "scanme.lab (10.0.0.5)" in out
     assert "22/tcp" in out
     assert "OpenSSH 7.4" in out
+    assert "CVE-2018-15473" in out
+
+
+def test_range_scan_is_reported_and_stored_per_host(tmp_path: Path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    scope_file = tmp_path / "scope.txt"
+    scope_file.write_text("10.0.0.0/24\n", encoding="utf-8")
+    db = tmp_path / "out.db"
+
+    fake = FakePlugin(
+        [
+            lab_asset(Service(port=22, name="ssh"), host="10.0.0.5", ip="10.0.0.5"),
+            lab_asset(host="10.0.0.7", ip="10.0.0.7"),  # up, nothing open
+        ]
+    )
+    monkeypatch.setattr(cli, "NmapPlugin", lambda: fake)
+
+    code = cli.main(["scan", "10.0.0.0/24", "--scope", str(scope_file), "--db", str(db)])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "hosts: 2 responded of 256 addresses" in out
+    # Each host has its own block; the port is listed under the host it belongs to.
+    first, second = out.index("\n  10.0.0.5\n"), out.index("\n  10.0.0.7\n")
+    assert first < out.index("22/tcp") < second
+    assert "no open ports found" in out[second:]
+
+    with Storage(db) as store:
+        rows = store._conn.execute("SELECT host, ip FROM asset ORDER BY id").fetchall()
+    assert [(r["host"], r["ip"]) for r in rows] == [
+        ("10.0.0.5", "10.0.0.5"),
+        ("10.0.0.7", "10.0.0.7"),
+    ]
 
 
 def test_scan_refuses_out_of_scope(tmp_path: Path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]

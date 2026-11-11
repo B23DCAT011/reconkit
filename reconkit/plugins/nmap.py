@@ -1,8 +1,8 @@
 """nmap adapter — port/service scan via `nmap -oX`.
 
-`scan()` runs nmap and feeds its XML straight into `parse_xml()`; `parse_xml()` is a
-pure function over the XML string, so the parsing logic is tested without nmap
-installed (see tests/data/nmap_sample.xml).
+`scan()` runs nmap and turns its XML into one `Asset` per host; `parse_xml()` does the
+same from an XML string, as a pure function, so the parsing logic is tested without
+nmap installed (see tests/data/nmap_sample.xml, nmap_two_hosts.xml).
 
 Safety: the target is validated by the scope guard *before* a plugin is called, and
 nmap is invoked with an argument list (never a shell string), so the target cannot be
@@ -16,7 +16,7 @@ import subprocess
 from xml.etree import ElementTree as ET
 
 from reconkit.plugins.base import ScanError
-from reconkit.schema import Service
+from reconkit.schema import Asset, Service
 
 
 class NmapPlugin:
@@ -35,8 +35,11 @@ class NmapPlugin:
     def _command(self, target: str) -> list[str]:
         return ["nmap", *self.extra_args, "-oX", "-", target]
 
-    def scan(self, target: str) -> list[Service]:
-        """Run nmap against `target`; every failure surfaces as `ScanError`."""
+    def scan(self, target: str) -> list[Asset]:
+        """Run nmap against `target`; return one `Asset` per host that responded.
+
+        Every failure surfaces as `ScanError`.
+        """
         if not self.is_available():
             raise ScanError("nmap is not installed or not on PATH", plugin=self.name)
         try:
@@ -95,7 +98,7 @@ class NmapPlugin:
                     plugin=self.name,
                     stderr=stderr,
                 )
-        return self._services(root)
+        return self._assets(root)
 
     @staticmethod
     def _host_counts(root: ET.Element) -> tuple[int, int] | None:
@@ -109,17 +112,58 @@ class NmapPlugin:
             return None
 
     @staticmethod
-    def parse_xml(xml: str) -> list[Service]:
-        """Parse nmap `-oX` output into a list of open services."""
-        return NmapPlugin._services(ET.fromstring(xml))
+    def parse_xml(xml: str) -> list[Asset]:
+        """Parse nmap `-oX` output into one `Asset` per host that is up."""
+        return NmapPlugin._assets(ET.fromstring(xml))
 
     @staticmethod
-    def _services(root: ET.Element) -> list[Service]:
-        services: list[Service] = []
+    def _assets(root: ET.Element) -> list[Asset]:
+        assets: list[Asset] = []
         for host in root.findall("host"):
-            ports = host.find("ports")
-            if ports is None:
-                continue
+            status = host.find("status")
+            if status is not None and status.get("state") != "up":
+                continue  # with -v nmap also lists the hosts that did not answer
+            ip = NmapPlugin._ip(host)
+            if ip is None:
+                continue  # no network address to attribute the result to
+            assets.append(
+                Asset(
+                    # Name the asset the way the user asked for it when nmap ties
+                    # that name to this host; in a range scan, the IP is the name.
+                    host=NmapPlugin._user_hostname(host) or ip,
+                    ip=ip,
+                    # A live host with nothing open is still a result worth keeping.
+                    services=NmapPlugin._services(host),
+                )
+            )
+        return assets
+
+    @staticmethod
+    def _ip(host: ET.Element) -> str | None:
+        """The host's IPv4/IPv6 address (nmap may also list its MAC address)."""
+        for address in host.findall("address"):
+            if address.get("addrtype") in ("ipv4", "ipv6"):
+                return address.get("addr")
+        return None
+
+    @staticmethod
+    def _user_hostname(host: ET.Element) -> str | None:
+        """The name given on the command line, if this host was scanned by name.
+
+        nmap marks it `type="user"`; a `type="PTR"` name comes from reverse DNS,
+        which the owner of the IP controls, so it is not used as the asset's name.
+        """
+        for hostname in host.findall("hostnames/hostname"):
+            if hostname.get("type") == "user" and hostname.get("name"):
+                return hostname.get("name")
+        return None
+
+    @staticmethod
+    def _services(host: ET.Element) -> list[Service]:
+        """The open ports of one `<host>` element."""
+        services: list[Service] = []
+        ports = host.find("ports")
+        if ports is not None:
             for port in ports.findall("port"):
                 state_el = port.find("state")
                 state = state_el.get("state", "") if state_el is not None else ""

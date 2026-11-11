@@ -7,6 +7,7 @@ with the nmap plugin -> run -> persist to SQLite -> print a summary.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import sys
 
 from reconkit.cve import LocalCveSource
@@ -21,15 +22,31 @@ def _print_summary(run: ScanRun, run_id: int, db_path: str) -> None:
     services = [s for a in run.assets for s in a.services]
     findings = [f for a in run.assets for f in a.findings]
     print(f"\nScan run #{run_id}  target={run.target}  (saved to {db_path})")
-    print(f"  services: {len(services)}   findings: {len(findings)}\n")
-    if services:
-        print(f"  {'PORT':<9}{'SERVICE':<12}{'PRODUCT / VERSION'}")
-        print(f"  {'-' * 9}{'-' * 12}{'-' * 20}")
-        for s in services:
+    print(f"  hosts: {_hosts_summary(run)}   services: {len(services)}   findings: {len(findings)}")
+    for asset in run.assets:
+        label = asset.host if asset.ip in (None, asset.host) else f"{asset.host} ({asset.ip})"
+        print(f"\n  {label}")
+        if not asset.services:
+            print("    no open ports found")
+            continue
+        print(f"    {'PORT':<11}{'SERVICE':<16}{'PRODUCT / VERSION'}")
+        print(f"    {'-' * 10} {'-' * 15} {'-' * 20}")
+        for s in asset.services:
             pv = " ".join(p for p in (s.product, s.version) if p) or "-"
-            print(f"  {f'{s.port}/{s.protocol}':<9}{(s.name or '-'):<12}{pv}")
-    for f in findings:
-        print(f"  [{f.severity.upper()}] {f.title}" + (f" ({f.cve})" if f.cve else ""))
+            print(f"    {f'{s.port}/{s.protocol}':<11}{(s.name or '-'):<16}{pv}")
+        for f in asset.findings:
+            print(f"    [{f.severity.upper()}] {f.title}" + (f" ({f.cve})" if f.cve else ""))
+
+
+def _hosts_summary(run: ScanRun) -> str:
+    """Hosts that responded; for a range target, out of how many addresses."""
+    found = len(run.assets)
+    try:
+        size = ipaddress.ip_network(run.target, strict=False).num_addresses
+    except ValueError:
+        return str(found)  # a hostname: no range to compare against
+    # The silent addresses are not listed: they may be unused, down, or filtered.
+    return f"{found} responded of {size} addresses" if size > 1 else str(found)
 
 
 def _indent(text: str, prefix: str = "  | ") -> str:
