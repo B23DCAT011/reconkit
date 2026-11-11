@@ -12,7 +12,15 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
 
 ## Mức 1 — Chạy sai / hỏng (ưu tiên sửa ngay)
 
-- [ ] **G1. Quét dải CIDR gộp mọi máy thành một Asset.**
+- [x] **G1. Quét dải CIDR gộp mọi máy thành một Asset.**
+  - ✅ **Đã sửa (F5)**: hợp đồng plugin đổi thành `scan(target) -> list[Asset]`, mỗi host
+    một `Asset`. Plugin nmap đọc `<status>`, `<address>`, `<hostnames>`: `Asset.ip` là địa
+    chỉ IPv4/IPv6 (bỏ qua MAC), `Asset.host` là tên người dùng gõ (`type="user"`) nếu có,
+    không thì là IP; host up mà không có cổng mở vẫn là một asset. Orchestrator gộp báo cáo
+    của nhiều plugin về cùng một máy (so IP; thiếu IP thì so tên). CLI in theo từng host.
+    Đã kiểm với nmap thật: `127.0.0.0/30` → 4 asset riêng.
+  - Còn lại: tên PTR và trường hợp một máy nhiều hostname chưa được lưu (cần thêm cột →
+    F7). Host được trả về chưa được kiểm lại với scope (→ F6).
   - Dẫn chứng: `orchestrator.py` tạo một `Asset(host=target)` duy nhất; `NmapPlugin.parse_xml()`
     duyệt mọi `<host>` nhưng bỏ địa chỉ, trả về một danh sách `Service` phẳng.
   - Hậu quả: quét `10.0.0.0/24` ra một "máy" tên `10.0.0.0/24`; không biết cổng nào của máy
@@ -33,9 +41,9 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
     vào `ScanRun.skipped_plugins` và CLI in cảnh báo. Plugin nmap đọc `runstats/hosts`:
     `total = 0` hoặc `up = 0` → `ScanError`. CLI trả exit code 4, không lưu run.
   - Còn lại: `skipped_plugins` chưa lưu vào DB (→ F7, `scan_run.status`). "Host không trả
-    lời" hiện là *lỗi* vì chưa có chỗ ghi trạng thái từng host; khi có (F5, D1) nó sẽ thành
-    một quan sát được lưu lại. Quét dải mà chỉ một phần host trả lời thì chưa hiển thị host
-    nào im lặng (→ F5).
+    lời" hiện là *lỗi* vì chưa có chỗ ghi trạng thái từng host; khi có (F7, D1) nó sẽ thành
+    một quan sát được lưu lại. Quét dải mà chỉ một phần host trả lời: từ F5 CLI in
+    "N responded of M addresses", nhưng chưa liệt kê địa chỉ nào im lặng (→ D1).
 
 - [x] **G3. nmap lỗi / quá thời gian làm chương trình crash.**
   - Dẫn chứng: `cli.py` chỉ bắt `RuntimeError`; `subprocess.CalledProcessError` và
@@ -104,7 +112,8 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
   Sửa: thêm `status`, `error`, `tool_version`.
 - [ ] **G15. Thiếu index khóa ngoại, thiếu `ON DELETE CASCADE`, chưa có migration.**
   Sửa: index FK, cascade, bảng `schema_version` + migration đơn giản.
-- [ ] **G16. `Asset.ip` không bao giờ được điền.** (sửa cùng G1)
+- [x] **G16. `Asset.ip` không bao giờ được điền.** (sửa cùng G1) ✅ F5: plugin nmap điền từ
+  `<address addrtype="ipv4|ipv6">`.
 
 ## Mức 3 — Hoàn thiện sản phẩm / portfolio
 
