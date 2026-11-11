@@ -14,7 +14,7 @@ from reconkit.cve import LocalCveSource
 from reconkit.orchestrator import NoPluginAvailableError, Orchestrator, ScanRun
 from reconkit.plugins.base import ScanError
 from reconkit.plugins.nmap import NmapPlugin
-from reconkit.scope import Scope, ScopeError
+from reconkit.scope import ResolutionError, Scope, ScopeError
 from reconkit.storage import Storage
 
 
@@ -22,6 +22,11 @@ def _print_summary(run: ScanRun, run_id: int, db_path: str) -> None:
     services = [s for a in run.assets for s in a.services]
     findings = [f for a in run.assets for f in a.findings]
     print(f"\nScan run #{run_id}  target={run.target}  (saved to {db_path})")
+    plan = run.plan
+    if plan is not None and plan.hostname:
+        print(f"  resolved: {plan.hostname} -> {', '.join(plan.addresses)}")
+    if plan is not None and plan.exclude:
+        print(f"  excluded (denylist): {', '.join(plan.exclude)}")
     print(f"  hosts: {_hosts_summary(run)}   services: {len(services)}   findings: {len(findings)}")
     for asset in run.assets:
         label = asset.host if asset.ip in (None, asset.host) else f"{asset.host} ({asset.ip})"
@@ -39,14 +44,18 @@ def _print_summary(run: ScanRun, run_id: int, db_path: str) -> None:
 
 
 def _hosts_summary(run: ScanRun) -> str:
-    """Hosts that responded; for a range target, out of how many addresses."""
+    """Hosts that responded; for a range target, out of how many addresses scanned."""
     found = len(run.assets)
-    try:
-        size = ipaddress.ip_network(run.target, strict=False).num_addresses
-    except ValueError:
-        return str(found)  # a hostname: no range to compare against
+    plan = run.plan
+    if plan is None or plan.hostname:
+        return str(found)  # a name: no range to compare against
+    size = sum(_size(a) for a in plan.addresses) - sum(_size(e) for e in plan.exclude)
     # The silent addresses are not listed: they may be unused, down, or filtered.
     return f"{found} responded of {size} addresses" if size > 1 else str(found)
+
+
+def _size(network: str) -> int:
+    return ipaddress.ip_network(network, strict=False).num_addresses
 
 
 def _indent(text: str, prefix: str = "  | ") -> str:
@@ -75,7 +84,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     except ScopeError as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 3
-    except NoPluginAvailableError as exc:
+    except (NoPluginAvailableError, ResolutionError) as exc:
         print(f"scan failed: {exc}", file=sys.stderr)
         return 4
     except ScanError as exc:
@@ -91,6 +100,12 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if run.skipped_plugins:
         skipped = ", ".join(run.skipped_plugins)
         print(f"warning: skipped unavailable scanners: {skipped}", file=sys.stderr)
+    if run.out_of_scope:
+        dropped = ", ".join(run.out_of_scope)
+        print(
+            f"warning: a scanner reported hosts outside the scope; not saved: {dropped}",
+            file=sys.stderr,
+        )
 
     with Storage(args.db) as store:
         run_id = store.save_run(run)

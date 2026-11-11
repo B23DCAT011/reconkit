@@ -15,20 +15,49 @@ The allowlist is loaded from a plain-text file, one entry per line:
 
 `#` starts a comment anywhere on a line. Any entry that is not a valid IP, CIDR or
 hostname is an error (with its line number) — never silently reinterpreted.
+
+A hostname entry authorises the *name* only. Before a scan the name is resolved and
+every address it points at must itself be in the allowlist (see `Scope.plan`), so a
+scope that lists `scanme.lab` must also list the address or range it lives in.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import re
+import socket
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from reconkit.schema import ScanTarget
 
 Network = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 
 class ScopeError(Exception):
     """Raised when a target is outside the authorised scope."""
+
+
+class ResolutionError(Exception):
+    """Raised when a hostname cannot be resolved, so there is nothing to check or scan."""
+
+
+# A resolver maps a hostname to its IPv4 addresses. Injectable so tests need no DNS.
+Resolver = Callable[[str], list[str]]
+
+
+def resolve_ipv4(hostname: str) -> list[str]:
+    """Resolve `hostname` to all of its IPv4 addresses using the system resolver.
+
+    IPv6 (AAAA) records are not looked up: scans run against the IPv4 addresses
+    returned here only, so an IPv6 address is never touched (KNOWN-GAPS G22).
+    """
+    try:
+        infos = socket.getaddrinfo(hostname, None, family=socket.AF_INET)
+    except socket.gaierror as exc:
+        raise ResolutionError(f"cannot resolve {hostname!r}: {exc.strerror or exc}") from exc
+    return [str(info[4][0]) for info in infos]
 
 
 def _parse_net(entry: str) -> Network | None:
@@ -121,12 +150,73 @@ class Scope:
             scope.add(entry)
         return scope
 
-    def is_allowed(self, target: str) -> bool:
-        """True iff `target` is inside the allowlist and touches nothing in the denylist.
+    def plan(self, target: str, resolver: Resolver | None = None) -> ScanTarget:
+        """Turn a requested target into the exact addresses that may be scanned.
 
-        A range target is refused if *any* of its addresses is denied (fail closed):
-        `10.0.0.0/24` with `!10.0.0.1` is refused as a whole. Excluding the denied
-        hosts and scanning the rest is a later, deliberate step (TASKS.md F6).
+        This is the gate every scan goes through. It raises :class:`ScopeError` if
+        the target is not authorised, or :class:`ResolutionError` if a name cannot
+        be resolved.
+
+        * IP / CIDR: must lie inside the allowlist. Denied addresses inside it are
+          returned in `exclude`; a target that is denied entirely is refused.
+        * Hostname: the name must be allowlisted, and so must **every** IPv4 address
+          it resolves to. An allowlisted name is not proof that the machine behind
+          it is ours (it may point at a CDN, or have been repointed). The name is
+          resolved here, once, and the scan uses these addresses, so it cannot
+          change between the check and the scan.
+        """
+        target = target.strip()
+        net = _parse_net(target)
+        if net is not None:
+            return self._plan_network(target, net)
+        return self._plan_hostname(target, resolver or resolve_ipv4)
+
+    def _plan_network(self, target: str, net: Network) -> ScanTarget:
+        if not any(_contained(net, a) for a in self.allow_nets):
+            raise ScopeError(_outside(target))
+        # Two CIDR blocks overlap only if one contains the other, so each denied
+        # block is either all of the target or a part of it.
+        denied = [d for d in self.deny_nets if _overlaps(net, d)]
+        parts: list[Network] = [d for d in denied if _contained(d, net)]
+        # Merge adjacent/nested parts, so their sizes can be added up.
+        exclude: list[Network] = list(ipaddress.collapse_addresses(parts))  # type: ignore[type-var]
+        covered_by_one = any(_contained(net, d) for d in denied)
+        covered_in_parts = sum(d.num_addresses for d in exclude) >= net.num_addresses
+        if covered_by_one or covered_in_parts:
+            raise ScopeError(f"Target {target!r} is entirely covered by the denylist.")
+        return ScanTarget(
+            requested=target,
+            addresses=(_net_str(net),),
+            exclude=tuple(_net_str(d) for d in exclude),
+        )
+
+    def _plan_hostname(self, target: str, resolver: Resolver) -> ScanTarget:
+        name = target.lower()
+        if name in self.deny_hosts or name not in self.allow_hosts:
+            raise ScopeError(_outside(target))
+        addresses = tuple(dict.fromkeys(resolver(name)))  # de-duplicated, order kept
+        if not addresses:
+            raise ResolutionError(f"{target!r} did not resolve to any IPv4 address")
+        for address in addresses:
+            if not self.is_allowed(address):
+                raise ScopeError(
+                    f"Target {target!r} resolves to {address}, which is outside the "
+                    f"authorised scope. A name in the allowlist does not authorise the "
+                    f"address behind it: add the address only if you may scan it."
+                )
+        return ScanTarget(requested=target, addresses=addresses, hostname=name)
+
+    def is_allowed(self, target: str) -> bool:
+        """True iff `target` is wholly inside the allowlist and touches no deny entry.
+
+        A pure check on the text of `target`: no DNS. For an address it is the full
+        answer (the orchestrator uses it to re-check every host a scan returns). For
+        a hostname it only says the *name* is allowlisted; :meth:`plan` is what
+        decides whether a name may be scanned.
+
+        A range is "allowed" here only if none of its addresses is denied:
+        `10.0.0.0/24` with `!10.0.0.1` is False, although :meth:`plan` can still
+        scan it with the denied address excluded.
         """
         target = target.strip().lower()
         net = _parse_net(target)
@@ -139,10 +229,14 @@ class Scope:
             return False
         return target in self.allow_hosts
 
-    def ensure_allowed(self, target: str) -> None:
-        """Raise :class:`ScopeError` if `target` is not authorised."""
-        if not self.is_allowed(target):
-            raise ScopeError(
-                f"Target {target!r} is outside the authorised scope. "
-                f"Add it to the allowlist only if you are permitted to scan it."
-            )
+
+def _outside(target: str) -> str:
+    return (
+        f"Target {target!r} is outside the authorised scope. "
+        f"Add it to the allowlist only if you are permitted to scan it."
+    )
+
+
+def _net_str(net: Network) -> str:
+    """A network the way nmap expects it: a bare IP for one address, else CIDR."""
+    return str(net.network_address) if net.num_addresses == 1 else str(net)

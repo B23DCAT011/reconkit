@@ -4,9 +4,10 @@
 same from an XML string, as a pure function, so the parsing logic is tested without
 nmap installed (see tests/data/nmap_sample.xml, nmap_two_hosts.xml).
 
-Safety: the target is validated by the scope guard *before* a plugin is called, and
-nmap is invoked with an argument list (never a shell string), so the target cannot be
-used to inject extra commands.
+Safety: the scope guard decides the exact addresses to scan *before* a plugin is
+called, and nmap receives those addresses, never a name it would resolve again. nmap
+is invoked with an argument list (never a shell string), so a target cannot be used to
+inject extra commands.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import subprocess
 from xml.etree import ElementTree as ET
 
 from reconkit.plugins.base import ScanError
-from reconkit.schema import Asset, Service
+from reconkit.schema import Asset, ScanTarget, Service
 
 
 class NmapPlugin:
@@ -32,14 +33,18 @@ class NmapPlugin:
     def is_available(self) -> bool:
         return shutil.which("nmap") is not None
 
-    def _command(self, target: str) -> list[str]:
-        return ["nmap", *self.extra_args, "-oX", "-", target]
+    def _command(self, target: ScanTarget) -> list[str]:
+        # Only addresses reach nmap, never a name: nmap would resolve a name again
+        # by itself, possibly to an address the scope guard never saw.
+        exclude = ["--exclude", ",".join(target.exclude)] if target.exclude else []
+        return ["nmap", *self.extra_args, "-oX", "-", *exclude, *target.addresses]
 
-    def scan(self, target: str) -> list[Asset]:
+    def scan(self, target: ScanTarget) -> list[Asset]:
         """Run nmap against `target`; return one `Asset` per host that responded.
 
         Every failure surfaces as `ScanError`.
         """
+        asked = target.requested
         if not self.is_available():
             raise ScanError("nmap is not installed or not on PATH", plugin=self.name)
         try:
@@ -55,13 +60,13 @@ class NmapPlugin:
             )
         except subprocess.TimeoutExpired as exc:
             raise ScanError(
-                f"nmap timed out after {self.timeout}s scanning {target}",
+                f"nmap timed out after {self.timeout}s scanning {asked}",
                 plugin=self.name,
             ) from exc
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or "").strip() or None
             raise ScanError(
-                f"nmap exited with code {exc.returncode} scanning {target}",
+                f"nmap exited with code {exc.returncode} scanning {asked}",
                 plugin=self.name,
                 stderr=stderr,
             ) from exc
@@ -75,7 +80,7 @@ class NmapPlugin:
         except ET.ParseError as exc:
             # Truncated or non-XML output: report it rather than guess at a result.
             raise ScanError(
-                f"nmap produced unreadable XML scanning {target}: {exc}",
+                f"nmap produced unreadable XML scanning {asked}: {exc}",
                 plugin=self.name,
                 stderr=stderr,
             ) from exc
@@ -87,18 +92,18 @@ class NmapPlugin:
             up, total = counts
             if total == 0:
                 raise ScanError(
-                    f"nmap scanned 0 hosts for {target} (could the name not be resolved?)",
+                    f"nmap scanned 0 hosts for {asked}",
                     plugin=self.name,
                     stderr=stderr,
                 )
             if up == 0:
                 raise ScanError(
-                    f"no host responded for {target} ({total} probed): "
+                    f"no host responded for {asked} ({total} probed): "
                     "down, or blocking nmap's host discovery",
                     plugin=self.name,
                     stderr=stderr,
                 )
-        return self._assets(root)
+        return self._assets(root, hostname=target.hostname)
 
     @staticmethod
     def _host_counts(root: ET.Element) -> tuple[int, int] | None:
@@ -112,12 +117,16 @@ class NmapPlugin:
             return None
 
     @staticmethod
-    def parse_xml(xml: str) -> list[Asset]:
-        """Parse nmap `-oX` output into one `Asset` per host that is up."""
-        return NmapPlugin._assets(ET.fromstring(xml))
+    def parse_xml(xml: str, hostname: str | None = None) -> list[Asset]:
+        """Parse nmap `-oX` output into one `Asset` per host that is up.
+
+        `hostname` is the name the user asked to scan, if any: nmap was given its
+        addresses, so the output no longer says which name they belong to.
+        """
+        return NmapPlugin._assets(ET.fromstring(xml), hostname=hostname)
 
     @staticmethod
-    def _assets(root: ET.Element) -> list[Asset]:
+    def _assets(root: ET.Element, hostname: str | None = None) -> list[Asset]:
         assets: list[Asset] = []
         for host in root.findall("host"):
             status = host.find("status")
@@ -128,9 +137,10 @@ class NmapPlugin:
                 continue  # no network address to attribute the result to
             assets.append(
                 Asset(
-                    # Name the asset the way the user asked for it when nmap ties
-                    # that name to this host; in a range scan, the IP is the name.
-                    host=NmapPlugin._user_hostname(host) or ip,
+                    # Name the asset the way the user asked for it; in an IP or
+                    # range scan, the IP is the name. Reverse-DNS (PTR) names are
+                    # not used: whoever owns the IP controls them.
+                    host=hostname or ip,
                     ip=ip,
                     # A live host with nothing open is still a result worth keeping.
                     services=NmapPlugin._services(host),
@@ -144,18 +154,6 @@ class NmapPlugin:
         for address in host.findall("address"):
             if address.get("addrtype") in ("ipv4", "ipv6"):
                 return address.get("addr")
-        return None
-
-    @staticmethod
-    def _user_hostname(host: ET.Element) -> str | None:
-        """The name given on the command line, if this host was scanned by name.
-
-        nmap marks it `type="user"`; a `type="PTR"` name comes from reverse DNS,
-        which the owner of the IP controls, so it is not used as the asset's name.
-        """
-        for hostname in host.findall("hostnames/hostname"):
-            if hostname.get("type") == "user" and hostname.get("name"):
-                return hostname.get("name")
         return None
 
     @staticmethod
