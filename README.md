@@ -20,7 +20,7 @@ Lộ trình chi tiết: [`TASKS.md`](TASKS.md).
 python -m venv .venv
 .venv/Scripts/activate        # Windows; macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
-pytest                        # 27 tests
+pytest
 ```
 
 ## Dùng thử
@@ -32,5 +32,12 @@ printf 'scanme.lab\n10.0.0.0/24\n' > scope.txt
 reconkit scan scanme.lab --scope scope.txt --db reconkit.db
 ```
 
-Target ngoài allowlist sẽ bị từ chối ngay (exit code 3). Cần cài `nmap` trên PATH để
-có kết quả service thật; không có nmap thì pipeline vẫn chạy và lưu run rỗng.
+Cần cài `nmap` trên PATH. ReconKit chỉ lưu một lần quét khi nó thực sự quét được: một run
+0 service nghĩa là "đã quét và không thấy gì", không bao giờ là "chưa quét".
+
+| Exit code | Ý nghĩa |
+|---|---|
+| 0 | Quét xong, kết quả đã lưu vào DB |
+| 2 | Đầu vào sai: không thấy file scope, hoặc file scope có dòng không hợp lệ |
+| 3 | Từ chối: target nằm ngoài scope |
+| 4 | Quét thất bại, **không lưu gì**: thiếu nmap, nmap lỗi / quá thời gian, không phân giải được tên, không host nào trả lời |

@@ -20,10 +20,22 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
   - Sửa: plugin trả kết quả **theo từng host** (đọc `<address>`, `<hostnames>`); orchestrator
     gộp theo IP; điền `Asset.ip`.
 
-- [ ] **G2. Không có nmap vẫn báo quét thành công.**
+- [x] **G2. Không có nmap vẫn báo quét thành công.**
   - Dẫn chứng: `orchestrator.py` — `if not plugin.is_available(): continue`.
   - Hậu quả: lưu một lần quét 0 service, người dùng tưởng máy sạch.
   - Sửa: không plugin nào chạy được → báo lỗi rõ ràng, không lưu run "thành công".
+  - **Lỗi đi kèm (đã xác nhận với nmap 7.92): nmap thoát code 0 dù không quét được gì.**
+    Tên không phân giải được → `<hosts up="0" down="0" total="0"/>`, lý do chỉ nằm ở stderr.
+    Host không trả lời → `<hosts up="0" down="1" total="1"/>`, không có thẻ `<host>` nào.
+    Cả hai trước đây đều được lưu thành run 0 service.
+  - ✅ **Đã sửa (F4)**: orchestrator ném `NoPluginAvailableError` khi không plugin nào chạy
+    được (kiểm tra *sau* scope); plugin bị bỏ qua trong khi plugin khác vẫn chạy được ghi
+    vào `ScanRun.skipped_plugins` và CLI in cảnh báo. Plugin nmap đọc `runstats/hosts`:
+    `total = 0` hoặc `up = 0` → `ScanError`. CLI trả exit code 4, không lưu run.
+  - Còn lại: `skipped_plugins` chưa lưu vào DB (→ F7, `scan_run.status`). "Host không trả
+    lời" hiện là *lỗi* vì chưa có chỗ ghi trạng thái từng host; khi có (F5, D1) nó sẽ thành
+    một quan sát được lưu lại. Quét dải mà chỉ một phần host trả lời thì chưa hiển thị host
+    nào im lặng (→ F5).
 
 - [x] **G3. nmap lỗi / quá thời gian làm chương trình crash.**
   - Dẫn chứng: `cli.py` chỉ bắt `RuntimeError`; `subprocess.CalledProcessError` và
