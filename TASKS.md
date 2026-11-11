@@ -55,6 +55,8 @@ Mục tiêu: **nhìn thấy** bề mặt tấn công sớm, trước khi xây we
       NVD API 2.0 về cache local (G9); `Finding.confidence` cho vấn đề backport (G10);
       CVSS score/vector, CWE, KEV, EPSS + xếp ưu tiên (G11).
 - [ ] Scan profile `quick` / `full`, cấu hình tốc độ / timeout (G6, G7).
+- [ ] Dấu vết kiểm toán: `scan_run` lưu mã băm file scope, người chạy, tham chiếu giấy phép
+      (G21).
 - [ ] `feat/diff` — so fingerprint giữa các lần quét: lỗi mới / đã hết / fix giả. Kèm mô hình
       dữ liệu lai: kho tài sản (`first_seen` / `last_seen`, trạng thái finding) + lịch sử
       từng run (`observation`, `finding_event`) — xem D1.
