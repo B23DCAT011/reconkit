@@ -11,6 +11,7 @@ import sys
 
 from reconkit.cve import LocalCveSource
 from reconkit.orchestrator import Orchestrator, ScanRun
+from reconkit.plugins.base import ScanError
 from reconkit.plugins.nmap import NmapPlugin
 from reconkit.scope import Scope, ScopeError
 from reconkit.storage import Storage
@@ -29,6 +30,10 @@ def _print_summary(run: ScanRun, run_id: int, db_path: str) -> None:
             print(f"  {f'{s.port}/{s.protocol}':<9}{(s.name or '-'):<12}{pv}")
     for f in findings:
         print(f"  [{f.severity.upper()}] {f.title}" + (f" ({f.cve})" if f.cve else ""))
+
+
+def _indent(text: str, prefix: str = "  | ") -> str:
+    return "\n".join(prefix + line for line in text.splitlines())
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
@@ -53,6 +58,12 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     except ScopeError as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 3
+    except ScanError as exc:
+        # A failed scan is never saved: an empty run would read as "nothing found".
+        print(f"scan failed [{exc.plugin}]: {exc}", file=sys.stderr)
+        if exc.stderr:
+            print(_indent(exc.stderr), file=sys.stderr)
+        return 4
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

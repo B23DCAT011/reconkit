@@ -15,6 +15,7 @@ import shutil
 import subprocess
 from xml.etree import ElementTree as ET
 
+from reconkit.plugins.base import ScanError
 from reconkit.schema import Service
 
 
@@ -35,16 +36,45 @@ class NmapPlugin:
         return ["nmap", *self.extra_args, "-oX", "-", target]
 
     def scan(self, target: str) -> list[Service]:
+        """Run nmap against `target`; every failure surfaces as `ScanError`."""
         if not self.is_available():
-            raise RuntimeError("nmap is not installed or not on PATH")
-        proc = subprocess.run(
-            self._command(target),
-            capture_output=True,
-            text=True,
-            timeout=self.timeout,
-            check=True,
-        )
-        return self.parse_xml(proc.stdout)
+            raise ScanError("nmap is not installed or not on PATH", plugin=self.name)
+        try:
+            proc = subprocess.run(
+                self._command(target),
+                capture_output=True,
+                # nmap writes UTF-8 XML; decode it as such instead of the Windows
+                # locale codepage, and never crash on a stray byte in a banner.
+                encoding="utf-8",
+                errors="replace",
+                timeout=self.timeout,
+                check=True,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ScanError(
+                f"nmap timed out after {self.timeout}s scanning {target}",
+                plugin=self.name,
+            ) from exc
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip() or None
+            raise ScanError(
+                f"nmap exited with code {exc.returncode} scanning {target}",
+                plugin=self.name,
+                stderr=stderr,
+            ) from exc
+        except OSError as exc:
+            # The binary vanished or is not executable between the check and the call.
+            raise ScanError(f"could not start nmap: {exc}", plugin=self.name) from exc
+
+        try:
+            return self.parse_xml(proc.stdout)
+        except ET.ParseError as exc:
+            # Truncated or non-XML output: report it rather than guess at a result.
+            raise ScanError(
+                f"nmap produced unreadable XML scanning {target}: {exc}",
+                plugin=self.name,
+                stderr=proc.stderr.strip() or None,
+            ) from exc
 
     @staticmethod
     def parse_xml(xml: str) -> list[Service]:

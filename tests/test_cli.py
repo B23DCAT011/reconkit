@@ -5,6 +5,7 @@ from pathlib import Path
 from conftest import FakePlugin
 
 from reconkit import cli
+from reconkit.plugins.base import ScanError
 from reconkit.schema import Service
 
 
@@ -51,3 +52,22 @@ def test_scan_rejects_invalid_scope_file(tmp_path: Path, monkeypatch, capsys) ->
     err = capsys.readouterr().err
     assert "invalid scope file" in err
     assert "scope.txt:2" in err
+
+
+def test_scan_failure_is_reported_not_saved(tmp_path: Path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    scope_file = tmp_path / "scope.txt"
+    scope_file.write_text("scanme.lab\n", encoding="utf-8")
+    db = tmp_path / "out.db"
+
+    error = ScanError("nmap exited with code 1", plugin="nmap", stderr="requires root\nQUITTING!")
+    monkeypatch.setattr(cli, "NmapPlugin", lambda: FakePlugin([], error=error))
+
+    code = cli.main(["scan", "scanme.lab", "--scope", str(scope_file), "--db", str(db)])
+    captured = capsys.readouterr()
+
+    assert code == 4  # scan failed
+    assert "scan failed [nmap]: nmap exited with code 1" in captured.err
+    assert "  | requires root" in captured.err  # the tool's own stderr is shown
+    assert "Traceback" not in captured.err
+    assert "Scan run" not in captured.out
+    assert not db.exists()  # a failed scan must not be stored as a clean run
