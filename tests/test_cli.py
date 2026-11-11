@@ -71,3 +71,20 @@ def test_scan_failure_is_reported_not_saved(tmp_path: Path, monkeypatch, capsys)
     assert "Traceback" not in captured.err
     assert "Scan run" not in captured.out
     assert not db.exists()  # a failed scan must not be stored as a clean run
+
+
+def test_scan_without_any_scanner_fails_and_saves_nothing(  # type: ignore[no-untyped-def]
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    scope_file = tmp_path / "scope.txt"
+    scope_file.write_text("scanme.lab\n", encoding="utf-8")
+    db = tmp_path / "out.db"
+
+    monkeypatch.setattr(cli, "NmapPlugin", lambda: FakePlugin([], available=False))
+    code = cli.main(["scan", "scanme.lab", "--scope", str(scope_file), "--db", str(db)])
+    captured = capsys.readouterr()
+
+    assert code == 4
+    assert "scan failed: no scanner available: fake" in captured.err
+    assert "Scan run" not in captured.out
+    assert not db.exists()  # "could not scan" must never be stored as "clean"

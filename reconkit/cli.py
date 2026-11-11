@@ -10,7 +10,7 @@ import argparse
 import sys
 
 from reconkit.cve import LocalCveSource
-from reconkit.orchestrator import Orchestrator, ScanRun
+from reconkit.orchestrator import NoPluginAvailableError, Orchestrator, ScanRun
 from reconkit.plugins.base import ScanError
 from reconkit.plugins.nmap import NmapPlugin
 from reconkit.scope import Scope, ScopeError
@@ -58,6 +58,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     except ScopeError as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 3
+    except NoPluginAvailableError as exc:
+        print(f"scan failed: {exc}", file=sys.stderr)
+        return 4
     except ScanError as exc:
         # A failed scan is never saved: an empty run would read as "nothing found".
         print(f"scan failed [{exc.plugin}]: {exc}", file=sys.stderr)
@@ -67,6 +70,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+
+    if run.skipped_plugins:
+        skipped = ", ".join(run.skipped_plugins)
+        print(f"warning: skipped unavailable scanners: {skipped}", file=sys.stderr)
 
     with Storage(args.db) as store:
         run_id = store.save_run(run)

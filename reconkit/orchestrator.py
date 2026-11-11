@@ -2,10 +2,10 @@
 
 It knows the *order of stages*, not the details of any tool:
 
-    scope gate  ->  run each available plugin  ->  collect services into an Asset
+    scope gate  ->  run each available plugin  ->  collect services  ->  CVE stage
 
-Findings (CVE matches etc.) are produced by a later stage and are left empty here;
-the `Asset.findings` list is the extension point for that work (see TASKS.md).
+A scan that could not run is an error, never an empty result: a run with zero
+services must mean "we looked and found nothing", not "we did not look".
 """
 
 from __future__ import annotations
@@ -19,6 +19,19 @@ from reconkit.schema import Asset
 from reconkit.scope import Scope
 
 
+class NoPluginAvailableError(Exception):
+    """None of the configured scanner plugins can run on this machine."""
+
+    def __init__(self, plugins: list[str]) -> None:
+        self.plugins = plugins
+        if plugins:
+            names = ", ".join(plugins)
+            message = f"no scanner available: {names} not installed or not on PATH"
+        else:
+            message = "no scanner configured"
+        super().__init__(message)
+
+
 @dataclass
 class ScanRun:
     """The result of one scan of one target."""
@@ -27,6 +40,8 @@ class ScanRun:
     started_at: str
     finished_at: str
     assets: list[Asset] = field(default_factory=list)
+    # Plugins that were configured but could not run; the result is partial.
+    skipped_plugins: list[str] = field(default_factory=list)
 
 
 class Orchestrator:
@@ -46,19 +61,29 @@ class Orchestrator:
         # 1. Safety gate: refuse anything outside the authorised scope.
         self.scope.ensure_allowed(target)
 
+        # 2. Fail loudly if nothing can scan: saving an empty run would look "clean".
+        runnable = [p for p in self.plugins if p.is_available()]
+        skipped = [p.name for p in self.plugins if p not in runnable]
+        if not runnable:
+            raise NoPluginAvailableError(skipped)
+
         started = datetime.now(UTC).isoformat()
 
-        # 2. Run every available plugin and merge the services onto one asset.
+        # 3. Run every available plugin and merge the services onto one asset.
         asset = Asset(host=target)
-        for plugin in self.plugins:
-            if not plugin.is_available():
-                continue
+        for plugin in runnable:
             asset.services.extend(plugin.scan(target))
 
-        # 3. CVE stage: match each service against known vulnerabilities.
+        # 4. CVE stage: match each service against known vulnerabilities.
         if self.cve_source is not None:
             for service in asset.services:
                 asset.findings.extend(self.cve_source.find(service, asset.host))
 
         finished = datetime.now(UTC).isoformat()
-        return ScanRun(target=target, started_at=started, finished_at=finished, assets=[asset])
+        return ScanRun(
+            target=target,
+            started_at=started,
+            finished_at=finished,
+            assets=[asset],
+            skipped_plugins=skipped,
+        )

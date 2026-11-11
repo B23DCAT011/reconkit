@@ -66,21 +66,56 @@ class NmapPlugin:
             # The binary vanished or is not executable between the check and the call.
             raise ScanError(f"could not start nmap: {exc}", plugin=self.name) from exc
 
+        stderr = proc.stderr.strip() or None
         try:
-            return self.parse_xml(proc.stdout)
+            root = ET.fromstring(proc.stdout)
         except ET.ParseError as exc:
             # Truncated or non-XML output: report it rather than guess at a result.
             raise ScanError(
                 f"nmap produced unreadable XML scanning {target}: {exc}",
                 plugin=self.name,
-                stderr=proc.stderr.strip() or None,
+                stderr=stderr,
             ) from exc
+
+        # nmap exits 0 even when it examined nothing, so the exit code alone cannot
+        # be trusted: check its own host counts before reporting "no open ports".
+        counts = self._host_counts(root)
+        if counts is not None:
+            up, total = counts
+            if total == 0:
+                raise ScanError(
+                    f"nmap scanned 0 hosts for {target} (could the name not be resolved?)",
+                    plugin=self.name,
+                    stderr=stderr,
+                )
+            if up == 0:
+                raise ScanError(
+                    f"no host responded for {target} ({total} probed): "
+                    "down, or blocking nmap's host discovery",
+                    plugin=self.name,
+                    stderr=stderr,
+                )
+        return self._services(root)
+
+    @staticmethod
+    def _host_counts(root: ET.Element) -> tuple[int, int] | None:
+        """Return nmap's own `(hosts up, hosts total)`, or None if it did not say."""
+        hosts = root.find("runstats/hosts")
+        if hosts is None:
+            return None
+        try:
+            return int(hosts.get("up", "")), int(hosts.get("total", ""))
+        except ValueError:
+            return None
 
     @staticmethod
     def parse_xml(xml: str) -> list[Service]:
         """Parse nmap `-oX` output into a list of open services."""
+        return NmapPlugin._services(ET.fromstring(xml))
+
+    @staticmethod
+    def _services(root: ET.Element) -> list[Service]:
         services: list[Service] = []
-        root = ET.fromstring(xml)
         for host in root.findall("host"):
             ports = host.find("ports")
             if ports is None:

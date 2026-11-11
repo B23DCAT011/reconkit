@@ -4,7 +4,7 @@ import pytest
 from conftest import FakePlugin
 
 from reconkit.cve import LocalCveSource
-from reconkit.orchestrator import Orchestrator
+from reconkit.orchestrator import NoPluginAvailableError, Orchestrator
 from reconkit.schema import Service
 from reconkit.scope import Scope, ScopeError
 
@@ -50,3 +50,24 @@ def test_skips_unavailable_plugins() -> None:
     orch = Orchestrator(plugins=[present, missing], scope=Scope.from_entries(["scanme.lab"]))
     run = orch.run("scanme.lab")
     assert {s.port for s in run.assets[0].services} == {22}
+    assert run.skipped_plugins == ["fake"]  # the result is flagged as partial
+
+
+def test_no_available_plugin_is_an_error() -> None:
+    missing = FakePlugin([Service(port=22)], available=False)
+    orch = Orchestrator(plugins=[missing], scope=Scope.from_entries(["scanme.lab"]))
+    with pytest.raises(NoPluginAvailableError, match="fake not installed"):
+        orch.run("scanme.lab")
+
+
+def test_no_configured_plugin_is_an_error() -> None:
+    orch = Orchestrator(plugins=[], scope=Scope.from_entries(["scanme.lab"]))
+    with pytest.raises(NoPluginAvailableError, match="no scanner configured"):
+        orch.run("scanme.lab")
+
+
+def test_scope_is_checked_before_plugin_availability() -> None:
+    missing = FakePlugin([], available=False)
+    orch = Orchestrator(plugins=[missing], scope=Scope.from_entries(["scanme.lab"]))
+    with pytest.raises(ScopeError):
+        orch.run("evil.example.com")
