@@ -105,3 +105,47 @@ def test_scan_wraps_truncated_xml(monkeypatch: pytest.MonkeyPatch) -> None:
     _fake_run(monkeypatch, done)
     with pytest.raises(ScanError, match="unreadable XML"):
         NmapPlugin().scan("scanme.lab")
+
+
+# --- scan(): nmap exits 0 but examined nothing (G2) --------------------------------
+
+
+def _run_xml(up: int, down: int, total: int) -> str:
+    """Minimal nmap output carrying only its own host counts."""
+    return (
+        '<?xml version="1.0"?><nmaprun><runstats>'
+        f'<hosts up="{up}" down="{down}" total="{total}"/>'
+        "</runstats></nmaprun>"
+    )
+
+
+def test_scan_rejects_zero_hosts_scanned(monkeypatch: pytest.MonkeyPatch) -> None:
+    # What real nmap does for an unresolvable name: exit 0, total="0", reason on stderr.
+    done = subprocess.CompletedProcess(
+        args=["nmap"],
+        returncode=0,
+        stdout=_run_xml(up=0, down=0, total=0),
+        stderr='Failed to resolve "no-such-host.invalid".\n',
+    )
+    _fake_run(monkeypatch, done)
+    with pytest.raises(ScanError, match="scanned 0 hosts") as excinfo:
+        NmapPlugin().scan("no-such-host.invalid")
+    assert excinfo.value.stderr == 'Failed to resolve "no-such-host.invalid".'
+
+
+def test_scan_rejects_no_host_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    done = subprocess.CompletedProcess(
+        args=["nmap"], returncode=0, stdout=_run_xml(up=0, down=1, total=1), stderr=""
+    )
+    _fake_run(monkeypatch, done)
+    with pytest.raises(ScanError, match="no host responded"):
+        NmapPlugin().scan("192.0.2.1")
+
+
+def test_scan_accepts_live_host_with_no_open_ports(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A host that answered and has nothing open is a real, clean result.
+    done = subprocess.CompletedProcess(
+        args=["nmap"], returncode=0, stdout=_run_xml(up=1, down=0, total=1), stderr=""
+    )
+    _fake_run(monkeypatch, done)
+    assert NmapPlugin().scan("scanme.lab") == []

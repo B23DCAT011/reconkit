@@ -22,4 +22,8 @@
       </port>
     </ports>
   </host>
+  <runstats>
+    <finished time="1700000012" elapsed="12.00" exit="success"/>
+    <hosts up="1" down="0" total="1"/>
+  </runstats>
 </nmaprun>
