@@ -31,6 +31,21 @@ class Severity(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class ScanTarget:
+    """What a plugin is allowed to touch for one scan, as decided by the scope guard.
+
+    Plugins never choose their own targets: they scan `addresses` (minus `exclude`)
+    and nothing else. Names are resolved once, by the scope guard, so the address a
+    plugin scans is the very address that was checked.
+    """
+
+    requested: str  # what the user asked for, e.g. "scanme.lab" or "10.0.0.0/24"
+    addresses: tuple[str, ...]  # in-scope IPs / CIDR ranges to scan
+    exclude: tuple[str, ...] = ()  # denied IPs / ranges inside `addresses`
+    hostname: str | None = None  # set when the user asked for a name
+
+
+@dataclass(frozen=True, slots=True)
 class Service:
     """An open port on an asset and the software fingerprinted behind it."""
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from reconkit.schema import Asset
+from reconkit.schema import Asset, ScanTarget
 
 
 class ScanError(Exception):
@@ -42,8 +42,11 @@ class ScannerPlugin(Protocol):
         """True if the underlying binary is installed and runnable."""
         ...
 
-    def scan(self, target: str) -> list[Asset]:
-        """Run the tool against `target` and return one `Asset` per host found.
+    def scan(self, target: ScanTarget) -> list[Asset]:
+        """Scan `target.addresses` (minus `target.exclude`); return one `Asset` per host.
+
+        The addresses were authorised by the scope guard: a plugin must scan exactly
+        those and must not resolve or expand the target on its own.
 
         A target may be a single host or a whole range, so the unit of a result is
         the host, never the target. Each asset carries what this tool learnt about
