@@ -32,7 +32,7 @@ format cũ), và lớp an toàn scope.
 | F2 ✅ | `fix/scope-deny-overlap` | G4 (phần denylist: dải IP chồng lấn deny; chú thích cuối dòng; entry không hợp lệ → lỗi) | Lỗi an toàn nghiêm trọng nhất, sửa nhỏ, độc lập |
 | F3 ✅ | `fix/scan-errors` | G3 — bọc lỗi subprocess thành `ScanError`, CLI báo lỗi rõ | Độc lập; cần có trước F4 để plugin mới dùng luôn |
 | F4 ✅ | `fix/no-plugin-available` | G2 — không plugin nào chạy được → lỗi, không lưu run "sạch" | Nhỏ; sửa cả câu sai trong README |
-| F5 | `refactor/per-host-assets` | G1 + G16 — plugin trả kết quả theo từng host, điền `Asset.ip` | Đổi hợp đồng plugin: phải xong trước khi thêm subfinder/nuclei |
+| F5 ✅ | `refactor/per-host-assets` | G1 + G16 — plugin trả kết quả theo từng host, điền `Asset.ip` | Đổi hợp đồng plugin: phải xong trước khi thêm subfinder/nuclei |
 | F6 | `fix/scope-resolve` | G4 (phần DNS) — phân giải 1 lần, kiểm mọi IP, quét bằng IP, `--exclude`, kiểm lại sau quét | Cần F2 + F5 (có danh sách host để kiểm lại) |
 | F7 | `refactor/storage-schema` | G5 + G14 + G15 — `finding.service_id`, `scan_run.status/error/tool_version`, index FK, cascade, `schema_version` | Đổi schema DB trước khi có dữ liệu thật tích lũy |
 | F8 | `fix/fingerprint-identity` | G12 — fingerprint theo asset + port + protocol + CVE/rule id | Phải ổn định trước `feat/diff` |

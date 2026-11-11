@@ -13,21 +13,47 @@ import pytest
 from reconkit.plugins.base import ScanError, ScannerPlugin
 from reconkit.plugins.nmap import NmapPlugin
 
-SAMPLE = (Path(__file__).parent / "data" / "nmap_sample.xml").read_text(encoding="utf-8")
+DATA = Path(__file__).parent / "data"
+SAMPLE = (DATA / "nmap_sample.xml").read_text(encoding="utf-8")
+TWO_HOSTS = (DATA / "nmap_two_hosts.xml").read_text(encoding="utf-8")
 
 
 def test_satisfies_plugin_protocol() -> None:
     assert isinstance(NmapPlugin(), ScannerPlugin)
 
 
+def test_host_scanned_by_name_keeps_the_name_and_gets_its_ip() -> None:
+    (asset,) = NmapPlugin.parse_xml(SAMPLE)
+    assert asset.host == "scanme.lab"  # the name the user asked for, not the PTR name
+    assert asset.ip == "10.0.0.5"  # G16
+
+
 def test_parses_only_open_ports() -> None:
-    services = NmapPlugin.parse_xml(SAMPLE)
-    ports = {s.port for s in services}
+    (asset,) = NmapPlugin.parse_xml(SAMPLE)
+    ports = {s.port for s in asset.services}
     assert ports == {22, 80}  # 443 is closed and excluded
 
 
+def test_range_scan_yields_one_asset_per_live_host() -> None:
+    # G1: every service stays attached to the machine it was found on.
+    web, quiet = NmapPlugin.parse_xml(TWO_HOSTS)  # 10.0.0.9 is down: not an asset
+    assert (web.host, web.ip) == ("10.0.0.5", "10.0.0.5")  # IP, not MAC or PTR name
+    assert [s.port for s in web.services] == [22]
+    assert (quiet.host, quiet.ip) == ("10.0.0.7", "10.0.0.7")
+    assert quiet.services == []  # up, nothing open: still reported
+
+
+def test_ipv6_address_is_used_as_the_ip() -> None:
+    xml = (
+        '<nmaprun><host><status state="up"/>'
+        '<address addr="2001:db8::5" addrtype="ipv6"/></host></nmaprun>'
+    )
+    (asset,) = NmapPlugin.parse_xml(xml)
+    assert (asset.host, asset.ip) == ("2001:db8::5", "2001:db8::5")
+
+
 def test_extracts_service_fields() -> None:
-    services = {s.port: s for s in NmapPlugin.parse_xml(SAMPLE)}
+    services = {s.port: s for s in NmapPlugin.parse_xml(SAMPLE)[0].services}
     ssh = services[22]
     assert ssh.name == "ssh"
     assert ssh.product == "OpenSSH"
@@ -43,7 +69,7 @@ def test_builds_argument_list_without_shell() -> None:
     assert "-oX" in cmd and "-" in cmd
 
 
-def test_empty_output_yields_no_services() -> None:
+def test_empty_output_yields_no_assets() -> None:
     xml = '<?xml version="1.0"?><nmaprun></nmaprun>'
     assert NmapPlugin.parse_xml(xml) == []
 
@@ -63,10 +89,12 @@ def _fake_run(monkeypatch: pytest.MonkeyPatch, outcome: object) -> None:
     monkeypatch.setattr(subprocess, "run", run)
 
 
-def test_scan_returns_services_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scan_returns_assets_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
     done = subprocess.CompletedProcess(args=["nmap"], returncode=0, stdout=SAMPLE, stderr="")
     _fake_run(monkeypatch, done)
-    assert {s.port for s in NmapPlugin().scan("scanme.lab")} == {22, 80}
+    (asset,) = NmapPlugin().scan("scanme.lab")
+    assert asset.ip == "10.0.0.5"
+    assert {s.port for s in asset.services} == {22, 80}
 
 
 def test_scan_wraps_missing_binary(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,8 +172,12 @@ def test_scan_rejects_no_host_up(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_scan_accepts_live_host_with_no_open_ports(monkeypatch: pytest.MonkeyPatch) -> None:
     # A host that answered and has nothing open is a real, clean result.
-    done = subprocess.CompletedProcess(
-        args=["nmap"], returncode=0, stdout=_run_xml(up=1, down=0, total=1), stderr=""
+    xml = (
+        '<nmaprun><host><status state="up"/><address addr="10.0.0.5" addrtype="ipv4"/></host>'
+        '<runstats><hosts up="1" down="0" total="1"/></runstats></nmaprun>'
     )
+    done = subprocess.CompletedProcess(args=["nmap"], returncode=0, stdout=xml, stderr="")
     _fake_run(monkeypatch, done)
-    assert NmapPlugin().scan("scanme.lab") == []
+    (asset,) = NmapPlugin().scan("10.0.0.5")
+    assert asset.ip == "10.0.0.5"
+    assert asset.services == []
