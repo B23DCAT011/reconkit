@@ -25,12 +25,17 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
   - Hậu quả: lưu một lần quét 0 service, người dùng tưởng máy sạch.
   - Sửa: không plugin nào chạy được → báo lỗi rõ ràng, không lưu run "thành công".
 
-- [ ] **G3. nmap lỗi / quá thời gian làm chương trình crash.**
+- [x] **G3. nmap lỗi / quá thời gian làm chương trình crash.**
   - Dẫn chứng: `cli.py` chỉ bắt `RuntimeError`; `subprocess.CalledProcessError` và
     `subprocess.TimeoutExpired` không phải `RuntimeError`.
   - Hậu quả: in traceback Python thay vì thông báo lỗi.
   - Sửa: plugin bọc lỗi subprocess thành một exception riêng (vd `ScanError`) kèm stderr;
     CLI bắt và trả exit code rõ ràng.
+  - ✅ **Đã sửa (F3)**: `ScanError` nằm trong `plugins/base.py` (thuộc hợp đồng plugin).
+    Plugin nmap bọc 5 trường hợp: thiếu binary, không khởi chạy được (`OSError`), exit code
+    khác 0 (kèm stderr của nmap), quá thời gian, XML hỏng / bị cắt. CLI in
+    `scan failed [nmap]: …`, trả exit code 4 và **không lưu run** vào DB. Output của nmap
+    được đọc theo UTF-8 thay vì codepage của Windows.
 
 - [ ] **G4. Scope chỉ kiểm tra chuỗi nhập vào, không kiểm tra IP thật.**
   - Dẫn chứng: `scope.py` so khớp hostname, không phân giải DNS.
