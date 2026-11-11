@@ -114,6 +114,14 @@ Rà soát lần đầu: 2026-10-28 (trên `main` sau PR #6).
   Sửa: index FK, cascade, bảng `schema_version` + migration đơn giản.
 - [x] **G16. `Asset.ip` không bao giờ được điền.** (sửa cùng G1) ✅ F5: plugin nmap điền từ
   `<address addrtype="ipv4|ipv6">`.
+- [ ] **G21. Không có dấu vết kiểm toán về uỷ quyền.** (từ Bài 3)
+  - Dẫn chứng: `scan_run` chỉ lưu `target`, `started_at`, `finished_at`. Không biết lần quét
+    đó dùng file scope nào (nội dung lúc đó ra sao), ai chạy, theo giấy phép / đợt kiểm thử
+    nào. Scope cũng không có khung giờ được phép quét.
+  - Hậu quả: khi bên bị quét hỏi "ai cho phép quét máy này lúc 2 giờ sáng", DB không trả lời
+    được; sửa file scope sau khi quét là mất dấu.
+  - Sửa: lưu vào `scan_run` mã băm SHA-256 + đường dẫn của file scope, người chạy, và một
+    trường tham chiếu giấy phép (`--engagement`); cân nhắc khung giờ trong file scope.
 
 ## Mức 3 — Hoàn thiện sản phẩm / portfolio
 
